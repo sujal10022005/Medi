@@ -43,50 +43,71 @@ const VideoCall = ({ sessionId , token}) => {
             return;
         }
 
+        console.log({ appId, sessionId, token });
+
         try{
-            sessionRef.current = window.OT.initSession(appId, sessionId)
+            sessionRef.current = window.OT.initSession(appId, sessionId);
 
-            sessionRef.current.on('streamCreated',(event) => {
-                sessionRef.current.subscribe(event.stream, "subscriber",{
-                    insertionMode : "append",
-                    width: "100%",
-                    height: "100%"
-                },
-                (error) => {
-                    if(error){
-                        toast.error("Error connecting to other participant's stream")
-                    }
-                }
-            );
-            })
+sessionRef.current.connect(token, (error) => {
+  if (error) {
+    toast.error("Error connecting to video session");
+    return;
+  }
 
-            // Handle session events
-        sessionRef.current.on("sessionConnected", () => {
-        setIsConnected(true);
-        setIsLoading(false);
+  setIsConnected(true);
+  setIsLoading(false);
 
-        // THIS IS THE FIX - Initialize publisher AFTER session connects
-        publisherRef.current = window.OT.initPublisher(
-          "publisher", // This targets the div with id="publisher"
-          {
-            insertMode: "replace", // Change from "append" to "replace"
-            width: "100%",
-            height: "100%",
-            publishAudio: isAudioEnabled,
-            publishVideo: isVideoEnabled,
-          },
-          (error) => {
-            if (error) {
-              console.error("Publisher error:", error);
-              toast.error("Error initializing your camera and microphone");
-            } else {
-              console.log(
-                "Publisher initialized successfully - you should see your video now"
-              );
-            }
+  // ✅ Safe to subscribe AFTER connection
+  sessionRef.current.on("streamCreated", (event) => {
+    const subscriberContainer = document.getElementById("subscriber");
+    if (!subscriberContainer) return;
+
+    sessionRef.current.subscribe(
+      event.stream,
+      "subscriber",
+      {
+        insertMode: "append",
+        width: "100%",
+        height: "100%",
+      },
+      (error) => {
+        if (error) {
+          toast.error("Error connecting to other participant's stream");
+        }
+      }
+    );
+  });
+
+  sessionRef.current.on("sessionDisconnected", () => {
+    setIsConnected(false);
+  });
+
+  // ✅ Publisher is initialized only after session is connected
+  publisherRef.current = window.OT.initPublisher(
+    "publisher",
+    {
+      insertMode: "replace",
+      width: "100%",
+      height: "100%",
+      publishAudio: isAudioEnabled,
+      publishVideo: isVideoEnabled,
+    },
+    (error) => {
+      if (error) {
+        toast.error("Error initializing your camera and microphone");
+      } else {
+        sessionRef.current.publish(publisherRef.current, (err) => {
+          if (err) {
+            toast.error("Error publishing your stream");
+          } else {
+            console.log("Stream published");
           }
-        );
-      });
+        });
+      }
+    }
+  );
+});
+
       sessionRef.current.on("sessionDisconnected", () => {
         setIsConnected(false);
       });
